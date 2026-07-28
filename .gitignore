@@ -1,0 +1,9 @@
+# Local / on-box artifacts (profiles live on /raid, not in git)
+*.nsys-rep
+*.qdrep
+*.ncu-rep
+*.sqlite
+*.log
+__pycache__/
+*.pyc
+.DS_Store

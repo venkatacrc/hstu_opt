@@ -1,0 +1,40 @@
+# MovieLens-20M ranking — short run for nsys/ncu (cudaProfilerApi window).
+# Mounted into the container at /raid/hstu/hstu_opt/configs/...
+
+TrainerArgs.train_batch_size = 128
+TrainerArgs.eval_batch_size = 128
+TrainerArgs.eval_interval = 100000
+TrainerArgs.log_interval = 10
+TrainerArgs.seed = 1234
+TrainerArgs.max_train_iters = 40
+TrainerArgs.profile = True
+TrainerArgs.profile_step_start = 20
+TrainerArgs.profile_step_end = 30
+TrainerArgs.pipeline_type = "prefetch"
+TrainerArgs.enable_balanced_shuffler = True
+TrainerArgs.ckpt_save_interval = -1
+
+DatasetArgs.dataset_name = 'ml-20m'
+DatasetArgs.dataset_path = '/raid/hstu/data'
+DatasetArgs.max_history_seqlen = 200
+DatasetArgs.shuffle = False
+DatasetArgs.max_num_candidates = 20
+
+NetworkArgs.dtype_str = "bfloat16"
+NetworkArgs.num_layers = 1
+NetworkArgs.num_attention_heads = 4
+NetworkArgs.hidden_size = 128
+NetworkArgs.kv_channels = 128
+NetworkArgs.target_group_size = 1
+
+RankingArgs.prediction_head_arch = [512, 10]
+RankingArgs.prediction_head_bias = True
+RankingArgs.num_tasks = 1
+RankingArgs.eval_metrics = ("AUC",)
+
+OptimizerArgs.optimizer_str = 'adam'
+OptimizerArgs.learning_rate = 1e-3
+OptimizerArgs.adam_beta1 = 0.9
+OptimizerArgs.adam_beta2 = 0.98
+
+TensorModelParallelArgs.tensor_model_parallel_size = 1
