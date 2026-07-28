@@ -42,7 +42,7 @@ echo "==> Log: ${LOG}"
       bash -lc "
         set -euo pipefail
         cd ${CONTAINER_WORKDIR}
-        export PYTHONPATH=${CONTAINER_RAID}/recsys-examples/examples:\${PYTHONPATH:-}
+        export PYTHONPATH=${CONTAINER_WORKDIR}:${CONTAINER_RAID}/recsys-examples/examples:\${PYTHONPATH:-}
         export CUDA_DEVICE_MAX_CONNECTIONS=${CUDA_DEVICE_MAX_CONNECTIONS}
         export FILL_DYNAMICEMB_TABLES=1
         export CUBLAS_NVTX_LEVEL=2

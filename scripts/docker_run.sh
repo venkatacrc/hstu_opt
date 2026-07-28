@@ -87,7 +87,9 @@ DOCKER_ARGS=(
   -e MAX_JOBS="${MAX_JOBS:-4}"
   -e CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS:-4}}"
   -e PYTHONUSERBASE="${DEPS_IN_CTR}"
-  -e PYTHONPATH="${SITE_PATH}:${CONTAINER_RAID}/recsys-examples/examples"
+  # examples/hstu first so `import configs` resolves to upstream RankingConfig,
+  # never a shadowed hstu_opt package directory.
+  -e PYTHONPATH="${CONTAINER_WORKDIR}:${CONTAINER_RAID}/recsys-examples/examples:${SITE_PATH}"
   -e PATH="${DEPS_IN_CTR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   -e FILL_DYNAMICEMB_TABLES="${FILL_DYNAMICEMB_TABLES:-1}"
   -v "${HSTU_RAID_ROOT}:${CONTAINER_RAID}"

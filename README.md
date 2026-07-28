@@ -15,7 +15,7 @@ Designed for a host where you cannot SSH from your laptop interactively: push th
 ## Layout
 
 ```
-configs/          # gin configs (smoke + profile windows)
+gin/              # gin configs (smoke + profile windows; not named configs/)
 scripts/
   00_env.sh                 # shared paths / image / NPROC
   docker_run.sh             # common docker run helper
@@ -119,12 +119,14 @@ This prints `PASTE_ME.txt` (recent log tails) and writes a tarball under `/raid/
 
 | File | Use |
 |------|-----|
-| `configs/movielen_ranking_smoke.gin` | Ranking smoke, 50 iters, no profiler |
-| `configs/movielen_retrieval_smoke.gin` | Retrieval smoke |
-| `configs/movielen_ranking_profile.gin` | Ranking nsys/ncu window |
-| `configs/movielen_retrieval_profile.gin` | Retrieval nsys/ncu window |
+| `gin/movielen_ranking_smoke.gin` | Ranking smoke, 50 iters, no profiler |
+| `gin/movielen_retrieval_smoke.gin` | Retrieval smoke |
+| `gin/movielen_ranking_profile.gin` | Ranking nsys/ncu window |
+| `gin/movielen_retrieval_profile.gin` | Retrieval nsys/ncu window |
 
 Dataset path is set to `/raid/hstu/data` (container mount of the raid tree).
+
+Gin files are under `gin/` on purpose: a top-level `configs/` directory would shadow upstream `examples/hstu/configs` (`RankingConfig`) when that path ends up on `PYTHONPATH`.
 
 ## Notes
 

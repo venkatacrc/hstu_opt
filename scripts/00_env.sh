@@ -45,10 +45,12 @@ export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
 
 # Gin configs shipped in this repo
-export RANKING_PROFILE_GIN="${RANKING_PROFILE_GIN:-${HSTU_OPT_ROOT}/configs/movielen_ranking_profile.gin}"
-export RETRIEVAL_PROFILE_GIN="${RETRIEVAL_PROFILE_GIN:-${HSTU_OPT_ROOT}/configs/movielen_retrieval_profile.gin}"
-export RANKING_SMOKE_GIN="${RANKING_SMOKE_GIN:-${HSTU_OPT_ROOT}/configs/movielen_ranking_smoke.gin}"
-export RETRIEVAL_SMOKE_GIN="${RETRIEVAL_SMOKE_GIN:-${HSTU_OPT_ROOT}/configs/movielen_retrieval_smoke.gin}"
+# Gin files live under gin/ (not configs/) so we never shadow upstream
+# examples/hstu/configs (RankingConfig / RetrievalConfig).
+export RANKING_PROFILE_GIN="${RANKING_PROFILE_GIN:-${HSTU_OPT_ROOT}/gin/movielen_ranking_profile.gin}"
+export RETRIEVAL_PROFILE_GIN="${RETRIEVAL_PROFILE_GIN:-${HSTU_OPT_ROOT}/gin/movielen_retrieval_profile.gin}"
+export RANKING_SMOKE_GIN="${RANKING_SMOKE_GIN:-${HSTU_OPT_ROOT}/gin/movielen_ranking_smoke.gin}"
+export RETRIEVAL_SMOKE_GIN="${RETRIEVAL_SMOKE_GIN:-${HSTU_OPT_ROOT}/gin/movielen_retrieval_smoke.gin}"
 
 # Inside-container mount of the raid tree
 export CONTAINER_RAID="${CONTAINER_RAID:-/raid/hstu}"

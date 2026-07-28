@@ -47,11 +47,17 @@ run_torchrun() {
     docker_cmd+=("${extra_docker[@]}")
   fi
 
+  # Upstream imports `from configs import RankingConfig` relative to examples/hstu.
+  # torchrun puts the script dir (training/) on sys.path first, so we must put
+  # examples/hstu itself on PYTHONPATH (not only examples/). Keep deps sites too.
+  local deps="${CONTAINER_RAID}/deps"
+  local py_path="${CONTAINER_WORKDIR}:${CONTAINER_RAID}/recsys-examples/examples:${deps}/lib/python3.12/site-packages:${deps}/local/lib/python3.12/dist-packages:${deps}/lib/python3.12/dist-packages"
+
   "${docker_cmd[@]}" -- \
     bash -lc "
       set -euo pipefail
       cd ${CONTAINER_WORKDIR}
-      export PYTHONPATH=${CONTAINER_RAID}/recsys-examples/examples:\${PYTHONPATH:-}
+      export PYTHONPATH='${py_path}'
       export CUDA_DEVICE_MAX_CONNECTIONS=${CUDA_DEVICE_MAX_CONNECTIONS}
       export FILL_DYNAMICEMB_TABLES=1
       torchrun \
