@@ -138,6 +138,7 @@ Dataset path is set to `/raid/hstu/data` (container mount of the raid tree).
   MAX_JOBS=2 ./scripts/03_install_train.sh
   ```
   Re-runs skip packages that already import cleanly.
+- Commons install uses `BUILD_EXT_ONLY=hstu_cuda_ops,kk_cpu_ops` so it skips `paged_kvcache_ops` (needs nvcomp under `/workspace/deps/nvcomp`; inference-only).
 - If DynamicEmb fails with `No module named 'fbgemm_gpu'` while TorchRec is installed: an older `setup.py --prefix` put FBGEMM under `deps/local/lib/python3.12/dist-packages`. Current scripts put that path on `PYTHONPATH` and prefer `pip --user` wheels. Just re-run:
   ```bash
   ./scripts/03_install_train.sh

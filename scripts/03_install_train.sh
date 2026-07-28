@@ -223,14 +223,19 @@ else
   popd >/dev/null
 fi
 
-echo "==> [6/6] examples/commons custom CUDA ops"
+echo "==> [6/6] examples/commons custom CUDA ops (training-only extensions)"
+# Full commons build also compiles paged_kvcache_ops, which hard-requires
+# nvcomp at /workspace/deps/nvcomp (inference). Training only needs
+# hstu_cuda_ops (+ kk_cpu_ops for the balanced shuffler).
 COMMONS_MARKER="${DEPS}/.commons_installed"
-if [[ -f "${COMMONS_MARKER}" ]]; then
-  echo "    skip commons (marker ${COMMONS_MARKER})"
+if [[ -f "${COMMONS_MARKER}" ]] && py_ok "import hstu_cuda_ops"; then
+  echo "    skip commons (marker ${COMMONS_MARKER} and hstu_cuda_ops importable)"
 else
   pushd "${RECSYS}/examples/commons" >/dev/null
+  rm -rf build dist ./*.egg-info 2>/dev/null || true
   MAX_JOBS="${MAX_JOBS}" \
   TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" \
+  BUILD_EXT_ONLY="hstu_cuda_ops,kk_cpu_ops" \
   pip install --no-build-isolation --no-cache-dir --user .
   popd >/dev/null
   touch "${COMMONS_MARKER}"
@@ -250,6 +255,8 @@ import fbgemm_gpu; print("fbgemm_gpu", fbgemm_gpu.__file__)
 import torchrec; print("torchrec", torchrec.__file__)
 import hstu; print("hstu", hstu.__file__)
 import dynamicemb; print("dynamicemb", dynamicemb.__file__)
+import hstu_cuda_ops; print("hstu_cuda_ops", hstu_cuda_ops.__file__)
+import kk_cpu_ops; print("kk_cpu_ops", kk_cpu_ops.__file__)
 print("INSTALL_OK")
 PY
 
