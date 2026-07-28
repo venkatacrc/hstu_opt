@@ -147,12 +147,12 @@ Gin files are under `gin/` on purpose: a top-level `configs/` directory would sh
   ```bash
   ./scripts/03_install_train.sh
   ```
-  Force-rebuild HSTU only if needed:
+  If `hstu` imports but fails on missing `fbgemm_gpu_experimental_hstu.so`:
   ```bash
-  rm -rf /raid/hstu/deps/lib/python3.12/site-packages/hstu* \
-         /raid/hstu/deps/lib/python3.12/site-packages/fbgemm_gpu_hstu* \
-         /raid/hstu/recsys-examples/third_party/FBGEMM/fbgemm_gpu/experimental/hstu/build
-  MAX_JOBS=2 ./scripts/03_install_train.sh
+  # Fast path: copy tagged .so → plain name library.py expects
+  ./scripts/fixup_hstu_so.sh
+  # If that says no .so at all, force a full CUDA rebuild:
+  FORCE_REBUILD=1 MAX_JOBS=2 ./scripts/fixup_hstu_so.sh
   ```
 - If nsys reports “No reports were generated”, confirm `TrainerArgs.profile=True` and that the container was started with `--privileged` (already set in 07–10).
 - `MASTER_PORT` defaults to `6000`; change if something else is bound.

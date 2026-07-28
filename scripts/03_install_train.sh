@@ -169,22 +169,58 @@ fi
 echo "    torchrec -> $(py_show 'import torchrec; print(torchrec.__file__)')"
 
 echo "==> [4/6] fbgemm_gpu_hstu (import hstu) from recsys submodule"
-# Must NOT treat examples/hstu (on PYTHONPATH via .../examples) as the package.
-# Require the real attention API from fbgemm_gpu_hstu.
-if py_ok "from hstu import hstu_attn_varlen_func; import hstu; assert 'site-packages' in (hstu.__file__ or '') or 'dist-packages' in (hstu.__file__ or '')"; then
-  echo "    skip hstu (real package): $(py_show 'import hstu; print(hstu.__file__)')"
+# library.py loads hstu/fbgemm_gpu_experimental_hstu.so (plain name). A pip
+# wheel often only ships the tagged *.cpython-312-*.so — detect either case.
+hstu_ok() {
+  python3 - <<'PY'
+import glob, os, importlib.util
+spec = importlib.util.find_spec("hstu")
+if spec is None or not spec.origin or "examples/hstu" in (spec.origin or ""):
+    raise SystemExit(1)
+pkg = os.path.dirname(spec.origin)
+plain = os.path.join(pkg, "fbgemm_gpu_experimental_hstu.so")
+tagged = glob.glob(os.path.join(pkg, "fbgemm_gpu_experimental_hstu*.so"))
+if not os.path.exists(plain) and not tagged:
+    raise SystemExit(2)
+# Ensure plain name exists for library.py
+if not os.path.exists(plain) and tagged:
+    import shutil
+    shutil.copy2(tagged[0], plain)
+    print(f"copied {tagged[0]} -> {plain}")
+from hstu import hstu_attn_varlen_func  # noqa: F401
+print(pkg)
+PY
+}
+
+if hstu_ok; then
+  echo "    skip hstu (real package + .so present): $(py_show 'import hstu; print(hstu.__file__)')"
 else
-  echo "    building fbgemm_gpu_hstu (previous import was missing or was examples/hstu shadow)"
+  echo "    building fbgemm_gpu_hstu (missing package or missing .so)"
   if [[ ! -d "${RECSYS}/third_party/FBGEMM/fbgemm_gpu/experimental/hstu" ]]; then
     echo "ERROR: missing third_party/FBGEMM HSTU sources; re-run 02_clone_upstream.sh" >&2
     exit 1
   fi
+  # Purge broken partial installs
+  pip uninstall -y fbgemm-gpu-hstu fbgemm_gpu_hstu hstu 2>/dev/null || true
+  rm -rf \
+    "${DEPS}/lib/python3.12/site-packages/hstu" \
+    "${DEPS}/lib/python3.12/site-packages/hstu"*egg* \
+    "${DEPS}/lib/python3.12/site-packages/fbgemm_gpu_hstu"* \
+    "${DEPS}/local/lib/python3.12/dist-packages/hstu" \
+    "${DEPS}/local/lib/python3.12/dist-packages/hstu"*egg* \
+    2>/dev/null || true
+
   pushd "${RECSYS}/third_party/FBGEMM/fbgemm_gpu/experimental/hstu" >/dev/null
   rm -rf build dist ./*.egg-info ./fbgemm_gpu_hstu.egg-info 2>/dev/null || true
 
   echo "    building fbgemm_gpu_hstu with MAX_JOBS=${MAX_JOBS} HSTU_ARCH_LIST=${HSTU_ARCH_LIST} HSTU_DISABLE_FP8=${HSTU_DISABLE_FP8}"
   HSTU_LOG="${DEPS}/logs/fbgemm_gpu_hstu_build.log"
+  export HSTU_SKIP_CUDA_BUILD=FALSE
+  unset HSTU_SKIP_CUDA_BUILD || true
+
   set +e
+  # setup.py install runs NinjaBuildExtension.run() which copies
+  # *.cpython-*.so -> fbgemm_gpu_experimental_hstu.so (required by library.py).
   MAX_JOBS="${MAX_JOBS}" \
   CMAKE_BUILD_PARALLEL_LEVEL="${MAX_JOBS}" \
   HSTU_ARCH_LIST="${HSTU_ARCH_LIST}" \
@@ -196,8 +232,36 @@ else
   HSTU_DISABLE_FP16=TRUE \
   HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8}" \
   HSTU_DISABLE_120=TRUE \
-  pip install --no-build-isolation --no-cache-dir --user . 2>&1 | tee "${HSTU_LOG}"
+  python3 setup.py clean --all >/dev/null 2>&1 || true
+  MAX_JOBS="${MAX_JOBS}" \
+  CMAKE_BUILD_PARALLEL_LEVEL="${MAX_JOBS}" \
+  HSTU_ARCH_LIST="${HSTU_ARCH_LIST}" \
+  HSTU_DISABLE_86OR89=TRUE \
+  HSTU_DISABLE_ARBITRARY=TRUE \
+  HSTU_DISABLE_LOCAL=TRUE \
+  HSTU_DISABLE_RAB=TRUE \
+  HSTU_DISABLE_DRAB=TRUE \
+  HSTU_DISABLE_FP16=TRUE \
+  HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8}" \
+  HSTU_DISABLE_120=TRUE \
+  python3 setup.py install --user 2>&1 | tee "${HSTU_LOG}"
   HSTU_RC=${PIPESTATUS[0]}
+  if [[ ${HSTU_RC} -ne 0 ]]; then
+    echo "    setup.py install failed; trying pip wheel path"
+    MAX_JOBS="${MAX_JOBS}" \
+    CMAKE_BUILD_PARALLEL_LEVEL="${MAX_JOBS}" \
+    HSTU_ARCH_LIST="${HSTU_ARCH_LIST}" \
+    HSTU_DISABLE_86OR89=TRUE \
+    HSTU_DISABLE_ARBITRARY=TRUE \
+    HSTU_DISABLE_LOCAL=TRUE \
+    HSTU_DISABLE_RAB=TRUE \
+    HSTU_DISABLE_DRAB=TRUE \
+    HSTU_DISABLE_FP16=TRUE \
+    HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8}" \
+    HSTU_DISABLE_120=TRUE \
+    pip install --no-build-isolation --no-cache-dir --user --force-reinstall . 2>&1 | tee -a "${HSTU_LOG}"
+    HSTU_RC=${PIPESTATUS[0]}
+  fi
   set -e
   if [[ ${HSTU_RC} -ne 0 ]]; then
     echo "ERROR: fbgemm_gpu_hstu build failed (exit ${HSTU_RC})." >&2
@@ -207,6 +271,39 @@ else
     exit "${HSTU_RC}"
   fi
   popd >/dev/null
+
+  # Post-install: ensure plain .so name exists; fail if CUDA ext never built.
+  python3 - <<'PY'
+import glob, os, shutil, importlib.util
+spec = importlib.util.find_spec("hstu")
+assert spec and spec.origin, "hstu not installed"
+pkg = os.path.dirname(spec.origin)
+assert "examples/hstu" not in pkg, pkg
+plain = os.path.join(pkg, "fbgemm_gpu_experimental_hstu.so")
+tagged = sorted(glob.glob(os.path.join(pkg, "fbgemm_gpu_experimental_hstu*.so")))
+print("hstu package dir:", pkg)
+print("dir listing:", sorted(os.listdir(pkg))[:40])
+print("so files:", tagged)
+if not tagged:
+    raise SystemExit(
+        "ERROR: no fbgemm_gpu_experimental_hstu*.so after install — "
+        "CUDA extension was not built/packaged. See /raid/hstu/deps/logs/fbgemm_gpu_hstu_build.log"
+    )
+if not os.path.exists(plain):
+    src = [t for t in tagged if os.path.basename(t) != "fbgemm_gpu_experimental_hstu.so"][0]
+    shutil.copy2(src, plain)
+    print(f"copied {src} -> {plain}")
+assert os.path.exists(plain), plain
+print("plain so ok:", plain)
+from hstu import hstu_attn_varlen_func
+print("import ok:", hstu_attn_varlen_func)
+PY
+
+  if ! hstu_ok; then
+    echo "ERROR: hstu still not importable after rebuild" >&2
+    ls -lah "${DEPS}/lib/python3.12/site-packages/hstu" 2>/dev/null || true
+    exit 1
+  fi
 fi
 
 echo "==> [5/6] DynamicEmb"
@@ -256,11 +353,16 @@ import gin; print("gin ok")
 import megatron.core; print("megatron.core ok")
 import fbgemm_gpu; print("fbgemm_gpu", fbgemm_gpu.__file__)
 import torchrec; print("torchrec", torchrec.__file__)
+import glob, os
 from hstu import hstu_attn_varlen_func
 import hstu
 print("hstu", hstu.__file__)
 assert hstu_attn_varlen_func is not None
 assert "examples/hstu" not in (hstu.__file__ or ""), hstu.__file__
+pkg = os.path.dirname(hstu.__file__)
+sos = glob.glob(os.path.join(pkg, "fbgemm_gpu_experimental_hstu*.so"))
+print("hstu sos", sos)
+assert sos, f"missing fbgemm_gpu_experimental_hstu*.so under {pkg}"
 import dynamicemb; print("dynamicemb", dynamicemb.__file__)
 import hstu_cuda_ops; print("hstu_cuda_ops", hstu_cuda_ops.__file__)
 import kk_cpu_ops; print("kk_cpu_ops", kk_cpu_ops.__file__)
