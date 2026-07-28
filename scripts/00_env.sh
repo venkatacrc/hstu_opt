@@ -31,18 +31,19 @@ export RECSYS_REF="${RECSYS_REF:-main}"
 export NSYS_BIN="${NSYS_BIN:-$(command -v nsys || true)}"
 export NCU_BIN="${NCU_BIN:-$(command -v ncu || true)}"
 
-# CUDA archs for B200 (sm_100). HSTU defaults to 10.0 only so we skip Hopper
-# sm90 FP8 instantiations that commonly fail / bloat the build on this node.
-# Override e.g. HSTU_ARCH_LIST="8.0 9.0 10.0" if you need multi-arch kernels.
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-10.0}"
-export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-10.0}"
-# Cap nvcc parallelism — fbgemm_gpu_hstu OOMs with default ninja -j $(nproc)
-# (upstream Dockerfile historically used MAX_JOBS=2).
+# B200 runtime uses pure-Python/Triton sm100 kernels (hstu.hstu_blackwell) when
+# 10.0 is in HSTU_ARCH_LIST. BUT setup.py only compiles fbgemm_gpu_experimental_hstu.so
+# when 8.0 / 9.0 / 12.0 is present — and library.py always load_library()'s that .so.
+# So we need BOTH: 8.0 (Ampere CUDA ext, lighter than Hopper) + 10.0 (Blackwell path).
+# Do NOT use HSTU_ARCH_LIST=10.0 alone or you get a package with no .so.
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0 10.0}"
+export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 10.0}"
+# Cap nvcc parallelism — fbgemm_gpu_hstu OOMs with default ninja -j $(nproc).
 export MAX_JOBS="${MAX_JOBS:-4}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
-# MovieLens bf16 training does not need FP8 kernels; disabling avoids the
-# sm90 e4m3 bwd instantiations that were failing in your log.
+# Skip FP8 / Hopper-heavy paths; MovieLens bf16 does not need them.
 export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
+export HSTU_DISABLE_120="${HSTU_DISABLE_120:-TRUE}"
 
 # Gin configs shipped in this repo
 # Gin files live under gin/ (not configs/) so we never shadow upstream

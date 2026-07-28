@@ -136,7 +136,7 @@ Gin files are under `gin/` on purpose: a top-level `configs/` directory would sh
 - First `03_install_train.sh` can take a long time (FBGEMM CUDA build).
 - `fbgemm_gpu_hstu` build defaults for this B200 kit:
   - `MAX_JOBS=4` (use `2` if OOM)
-  - `HSTU_ARCH_LIST=10.0` (Blackwell only; skips Hopper sm90)
+  - `HSTU_ARCH_LIST="8.0 10.0"` — **must not be `10.0` alone**. sm100 is pure Python (`hstu_blackwell`); the CUDA `.so` is only built for 8.0/9.0/12.0, and `library.py` always loads that `.so`.
   - `HSTU_DISABLE_FP8=TRUE` (MovieLens bf16 does not need e4m3 kernels)
   ```bash
   MAX_JOBS=2 ./scripts/03_install_train.sh

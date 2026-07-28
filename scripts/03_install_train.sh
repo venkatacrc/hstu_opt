@@ -66,11 +66,18 @@ export PYTHONNOUSERSITE=0
 # Avoid NGC pip constraint files interfering with source builds
 unset PIP_CONSTRAINT || true
 
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-10.0}"
-export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-10.0}"
+# Must include 8.0 (or 9.0/12.0) so CUDAExtension/.so is built; 10.0 alone
+# only installs pure-Python hstu_blackwell and leaves no .so for library.py.
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0 10.0}"
+export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 10.0}"
 export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
+export HSTU_DISABLE_120="${HSTU_DISABLE_120:-TRUE}"
 export MAX_JOBS="${MAX_JOBS:-4}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
+if [[ "${HSTU_ARCH_LIST}" == "10.0" ]]; then
+  echo "ERROR: HSTU_ARCH_LIST=10.0 alone skips CUDAExtension; use '8.0 10.0'" >&2
+  exit 1
+fi
 
 py_ok() {
   local code="$1"
@@ -231,8 +238,10 @@ else
   HSTU_DISABLE_DRAB=TRUE \
   HSTU_DISABLE_FP16=TRUE \
   HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8}" \
-  HSTU_DISABLE_120=TRUE \
+  HSTU_DISABLE_120="${HSTU_DISABLE_120}" \
   python3 setup.py clean --all >/dev/null 2>&1 || true
+
+  echo "    NOTE: arch 8.0 builds fbgemm_gpu_experimental_hstu.so; 10.0 adds hstu_blackwell"
   MAX_JOBS="${MAX_JOBS}" \
   CMAKE_BUILD_PARALLEL_LEVEL="${MAX_JOBS}" \
   HSTU_ARCH_LIST="${HSTU_ARCH_LIST}" \
@@ -243,7 +252,7 @@ else
   HSTU_DISABLE_DRAB=TRUE \
   HSTU_DISABLE_FP16=TRUE \
   HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8}" \
-  HSTU_DISABLE_120=TRUE \
+  HSTU_DISABLE_120="${HSTU_DISABLE_120}" \
   python3 setup.py install --user 2>&1 | tee "${HSTU_LOG}"
   HSTU_RC=${PIPESTATUS[0]}
   if [[ ${HSTU_RC} -ne 0 ]]; then
@@ -258,7 +267,7 @@ else
     HSTU_DISABLE_DRAB=TRUE \
     HSTU_DISABLE_FP16=TRUE \
     HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8}" \
-    HSTU_DISABLE_120=TRUE \
+    HSTU_DISABLE_120="${HSTU_DISABLE_120}" \
     pip install --no-build-isolation --no-cache-dir --user --force-reinstall . 2>&1 | tee -a "${HSTU_LOG}"
     HSTU_RC=${PIPESTATUS[0]}
   fi
@@ -380,6 +389,7 @@ chmod +x "${INSTALL_SCRIPT}"
     export TORCH_CUDA_ARCH_LIST='${TORCH_CUDA_ARCH_LIST}'
     export HSTU_ARCH_LIST='${HSTU_ARCH_LIST}'
     export HSTU_DISABLE_FP8='${HSTU_DISABLE_FP8}'
+    export HSTU_DISABLE_120='${HSTU_DISABLE_120}'
     export MAX_JOBS='${MAX_JOBS}'
     export CMAKE_BUILD_PARALLEL_LEVEL='${MAX_JOBS}'
     export PYTHONUSERBASE=${CONTAINER_RAID}/deps
