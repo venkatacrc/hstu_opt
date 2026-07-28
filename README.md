@@ -137,7 +137,12 @@ Dataset path is set to `/raid/hstu/data` (container mount of the raid tree).
   ```bash
   MAX_JOBS=2 ./scripts/03_install_train.sh
   ```
-  Re-runs skip packages that already import cleanly. If `hstu` was half-installed, force rebuild:
+  Re-runs skip packages that already import cleanly.
+- If DynamicEmb fails with `No module named 'fbgemm_gpu'` while TorchRec is installed: an older `setup.py --prefix` put FBGEMM under `deps/local/lib/python3.12/dist-packages`. Current scripts put that path on `PYTHONPATH` and prefer `pip --user` wheels. Just re-run:
+  ```bash
+  ./scripts/03_install_train.sh
+  ```
+  Force-rebuild HSTU only if needed:
   ```bash
   rm -rf /raid/hstu/deps/lib/python3.12/site-packages/hstu* \
          /raid/hstu/deps/lib/python3.12/site-packages/fbgemm_gpu_hstu* \

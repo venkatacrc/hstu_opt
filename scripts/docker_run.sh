@@ -62,10 +62,15 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
-# Persistent pip --user prefix from 03_install_train.sh
+# Persistent pip --user prefix from 03_install_train.sh.
+# setup.py --prefix also used deps/local/lib/.../dist-packages — keep both.
 DEPS_IN_CTR="${CONTAINER_RAID}/deps"
-# NGC 26.05 uses CPython 3.12; include 3.11 as a fallback path.
-SITE_PATH="${DEPS_IN_CTR}/lib/python3.12/site-packages:${DEPS_IN_CTR}/lib/python3.11/site-packages"
+SITE_PATH="\
+${DEPS_IN_CTR}/lib/python3.12/site-packages:\
+${DEPS_IN_CTR}/local/lib/python3.12/dist-packages:\
+${DEPS_IN_CTR}/lib/python3.12/dist-packages:\
+${DEPS_IN_CTR}/local/lib/python3.12/site-packages:\
+${DEPS_IN_CTR}/lib/python3.11/site-packages"
 
 DOCKER_ARGS=(
   --rm

@@ -24,8 +24,19 @@ TS="$(timestamp)"
 LOG="${LOG_ROOT}/03_install_train_${TS}.log"
 echo "==> Logging to ${LOG}"
 
-# Install into the raid-mounted tree so packages persist across container restarts
-# via a site-packages prefix under /raid/hstu/deps.
+# setup.py --prefix=DEPS on Debian/Ubuntu layouts lands in
+#   DEPS/local/lib/python3.12/dist-packages
+# while pip --user + PYTHONUSERBASE=DEPS lands in
+#   DEPS/lib/python3.12/site-packages
+# Both must be on PYTHONPATH.
+DEPS_SITE_PATH="\
+${CONTAINER_RAID}/deps/lib/python3.12/site-packages:\
+${CONTAINER_RAID}/deps/local/lib/python3.12/dist-packages:\
+${CONTAINER_RAID}/deps/lib/python3.12/dist-packages:\
+${CONTAINER_RAID}/deps/local/lib/python3.12/site-packages:\
+${CONTAINER_RAID}/deps/lib/python3.11/site-packages:\
+${CONTAINER_RAID}/recsys-examples/examples"
+
 INSTALL_SCRIPT="${HSTU_RAID_ROOT}/_install_train_inner.sh"
 cat > "${INSTALL_SCRIPT}" <<'INNER'
 #!/usr/bin/env bash
@@ -35,29 +46,45 @@ RAID="${HSTU_CONTAINER_RAID:-/raid/hstu}"
 RECSYS="${RAID}/recsys-examples"
 DEPS="${RAID}/deps"
 mkdir -p "${DEPS}/megatron-lm" "${DEPS}/wheels" "${DEPS}/logs"
+mkdir -p "${DEPS}/lib/python3.12/site-packages"
 
 export PYTHONUSERBASE="${DEPS}"
 export PATH="${DEPS}/bin:${PATH}"
-export PYTHONPATH="${DEPS}/lib/python3.12/site-packages:${DEPS}/lib/python3.11/site-packages:${RECSYS}/examples:${PYTHONPATH:-}"
+
+# Cover both pip --user and setup.py --prefix install layouts.
+export PYTHONPATH="\
+${DEPS}/lib/python3.12/site-packages:\
+${DEPS}/local/lib/python3.12/dist-packages:\
+${DEPS}/lib/python3.12/dist-packages:\
+${DEPS}/local/lib/python3.12/site-packages:\
+${DEPS}/lib/python3.11/site-packages:\
+${RECSYS}/examples${PYTHONPATH:+:${PYTHONPATH}}"
+
+# Prefer user site for imports
+export PYTHONNOUSERSITE=0
+
 # Avoid NGC pip constraint files interfering with source builds
 unset PIP_CONSTRAINT || true
 
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-10.0}"
 export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-10.0}"
 export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
-# Critical: default ninja uses all cores (~112) and OOMs compiling HSTU CUDA.
 export MAX_JOBS="${MAX_JOBS:-4}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
-# torch.utils.cpp_extension honors MAX_JOBS for ninja
 
 py_ok() {
   local code="$1"
   python3 -c "${code}" >/dev/null 2>&1
 }
 
+py_show() {
+  python3 -c "$1" 2>&1 || true
+}
+
 echo "==> Python: $(python3 --version)  torch: $(python3 -c 'import torch; print(torch.__version__, torch.version.cuda)')"
 echo "==> GPU count: $(python3 -c 'import torch; print(torch.cuda.device_count())')"
 echo "==> MAX_JOBS=${MAX_JOBS} TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST} HSTU_ARCH_LIST=${HSTU_ARCH_LIST} HSTU_DISABLE_FP8=${HSTU_DISABLE_FP8}"
+echo "==> PYTHONPATH=${PYTHONPATH}"
 
 pip_install() {
   pip install --no-cache-dir --user "$@"
@@ -91,23 +118,42 @@ else
 fi
 
 echo "==> [3/6] FBGEMM GPU (default/cuda) + TorchRec V1.5.0"
-if py_ok "import fbgemm_gpu"; then
-  echo "    skip fbgemm_gpu (already importable)"
+if py_ok "import fbgemm_gpu; import fbgemm_gpu.runtime_monitor"; then
+  echo "    skip fbgemm_gpu (already importable): $(py_show 'import fbgemm_gpu; print(fbgemm_gpu.__file__)')"
 else
   if [[ ! -d "${DEPS}/fbgemm/.git" ]]; then
     git clone --recursive -b v1.5.0 https://github.com/pytorch/FBGEMM.git "${DEPS}/fbgemm"
   fi
   pushd "${DEPS}/fbgemm/fbgemm_gpu" >/dev/null
-  # Limit parallelism for the large CUDA build
+  rm -rf build dist ./*.egg-info 2>/dev/null || true
+  # Build a wheel then pip --user install so files land in
+  # $PYTHONUSERBASE/lib/python3.12/site-packages (not .../local/lib/.../dist-packages).
+  echo "    building fbgemm_gpu wheel (MAX_JOBS=${MAX_JOBS})"
   MAX_JOBS="${MAX_JOBS}" \
   TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" \
-  python3 setup.py install --prefix="${DEPS}" --build-target=default --build-variant=cuda \
+  python3 setup.py bdist_wheel --build-target=default --build-variant=cuda \
     -DTORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}"
+  WHL=$(ls -1t dist/fbgemm_gpu*.whl 2>/dev/null | head -n 1 || true)
+  if [[ -z "${WHL}" ]]; then
+    echo "ERROR: fbgemm_gpu wheel not produced under dist/" >&2
+    exit 1
+  fi
+  pip install --no-cache-dir --user --force-reinstall "${WHL}"
   popd >/dev/null
 fi
 
-if py_ok "import torchrec"; then
-  echo "    skip torchrec (already importable)"
+if ! py_ok "import fbgemm_gpu; import fbgemm_gpu.runtime_monitor"; then
+  echo "ERROR: fbgemm_gpu still not importable after install." >&2
+  echo "PYTHONPATH=${PYTHONPATH}" >&2
+  py_show 'import sys; print("\n".join(sys.path))'
+  ls -la "${DEPS}/lib/python3.12/site-packages" 2>/dev/null | head || true
+  ls -la "${DEPS}/local/lib/python3.12/dist-packages" 2>/dev/null | head || true
+  exit 1
+fi
+echo "    fbgemm_gpu -> $(py_show 'import fbgemm_gpu; print(fbgemm_gpu.__file__)')"
+
+if py_ok "import torchrec; import fbgemm_gpu"; then
+  echo "    skip torchrec (already importable with fbgemm_gpu)"
 else
   if [[ ! -d "${DEPS}/torchrec/.git" ]]; then
     git clone --recursive -b release/V1.5.0 https://github.com/pytorch/torchrec.git "${DEPS}/torchrec"
@@ -115,31 +161,23 @@ else
   pip install --no-deps --user -e "${DEPS}/torchrec"
 fi
 
+if ! py_ok "import torchrec"; then
+  echo "ERROR: torchrec import failed (needs fbgemm_gpu on PYTHONPATH)." >&2
+  py_show 'import torchrec'
+  exit 1
+fi
+echo "    torchrec -> $(py_show 'import torchrec; print(torchrec.__file__)')"
+
 echo "==> [4/6] fbgemm_gpu_hstu (import hstu) from recsys submodule"
 if py_ok "import hstu"; then
-  echo "    skip hstu (already importable)"
+  echo "    skip hstu (already importable): $(py_show 'import hstu; print(hstu.__file__)')"
 else
   if [[ ! -d "${RECSYS}/third_party/FBGEMM/fbgemm_gpu/experimental/hstu" ]]; then
     echo "ERROR: missing third_party/FBGEMM HSTU sources; re-run 02_clone_upstream.sh" >&2
     exit 1
   fi
   pushd "${RECSYS}/third_party/FBGEMM/fbgemm_gpu/experimental/hstu" >/dev/null
-  # Clean prior failed build artifacts that can confuse ninja
   rm -rf build dist ./*.egg-info ./fbgemm_gpu_hstu.egg-info 2>/dev/null || true
-
-  # B200 bf16 path: build sm_100 only, skip FP8 (your log failed in sm90 e4m3 bwd).
-  # MAX_JOBS must stay low — override with MAX_JOBS=2 if OOM persists.
-  export HSTU_DISABLE_86OR89=TRUE
-  export HSTU_DISABLE_ARBITRARY=TRUE
-  export HSTU_DISABLE_LOCAL=TRUE
-  export HSTU_DISABLE_RAB=TRUE
-  export HSTU_DISABLE_DRAB=TRUE
-  export HSTU_DISABLE_FP16=TRUE
-  export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
-  export HSTU_DISABLE_120=TRUE
-  export HSTU_ARCH_LIST
-  export MAX_JOBS
-  export CMAKE_BUILD_PARALLEL_LEVEL="${MAX_JOBS}"
 
   echo "    building fbgemm_gpu_hstu with MAX_JOBS=${MAX_JOBS} HSTU_ARCH_LIST=${HSTU_ARCH_LIST} HSTU_DISABLE_FP8=${HSTU_DISABLE_FP8}"
   HSTU_LOG="${DEPS}/logs/fbgemm_gpu_hstu_build.log"
@@ -172,16 +210,20 @@ echo "==> [5/6] DynamicEmb"
 if py_ok "import dynamicemb"; then
   echo "    skip dynamicemb (already importable)"
 else
+  # setup.py imports torchrec at configure time — PYTHONPATH must see fbgemm_gpu.
+  if ! py_ok "import torchrec; import fbgemm_gpu"; then
+    echo "ERROR: cannot build dynamicemb: torchrec/fbgemm_gpu import failed" >&2
+    py_show 'import torchrec'
+    exit 1
+  fi
   pushd "${RECSYS}/corelib/dynamicemb" >/dev/null
   MAX_JOBS="${MAX_JOBS}" \
   TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" \
-  python3 setup.py install --prefix="${DEPS}"
+  pip install --no-build-isolation --no-cache-dir --user .
   popd >/dev/null
 fi
 
 echo "==> [6/6] examples/commons custom CUDA ops"
-# commons installs as a collection of extensions; always rebuild if import of a
-# known helper fails. Best-effort: run install when marker missing.
 COMMONS_MARKER="${DEPS}/.commons_installed"
 if [[ -f "${COMMONS_MARKER}" ]]; then
   echo "    skip commons (marker ${COMMONS_MARKER})"
@@ -189,21 +231,25 @@ else
   pushd "${RECSYS}/examples/commons" >/dev/null
   MAX_JOBS="${MAX_JOBS}" \
   TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" \
-  python3 setup.py install --prefix="${DEPS}"
+  pip install --no-build-isolation --no-cache-dir --user .
   popd >/dev/null
   touch "${COMMONS_MARKER}"
 fi
 
 echo "==> Smoke imports"
 python3 - <<'PY'
+import sys
+print("sys.path[0:8]=")
+for p in sys.path[:8]:
+    print(" ", p)
 import torch
 print("torch", torch.__version__, "cuda", torch.version.cuda, "gpus", torch.cuda.device_count())
 import gin; print("gin ok")
 import megatron.core; print("megatron.core ok")
-import torchrec; print("torchrec", getattr(torchrec, "__version__", "?"))
-import fbgemm_gpu; print("fbgemm_gpu ok")
-import hstu; print("hstu (fbgemm_gpu_hstu) ok")
-import dynamicemb; print("dynamicemb ok")
+import fbgemm_gpu; print("fbgemm_gpu", fbgemm_gpu.__file__)
+import torchrec; print("torchrec", torchrec.__file__)
+import hstu; print("hstu", hstu.__file__)
+import dynamicemb; print("dynamicemb", dynamicemb.__file__)
 print("INSTALL_OK")
 PY
 
@@ -212,7 +258,6 @@ INNER
 
 chmod +x "${INSTALL_SCRIPT}"
 
-# Persist user site under /raid/hstu/deps across runs
 "${SCRIPT_DIR}/docker_run.sh" --privileged --name "${CONTAINER_NAME}-install" -- \
   bash -lc "
     export HSTU_CONTAINER_RAID=${CONTAINER_RAID}
@@ -223,10 +268,12 @@ chmod +x "${INSTALL_SCRIPT}"
     export CMAKE_BUILD_PARALLEL_LEVEL='${MAX_JOBS}'
     export PYTHONUSERBASE=${CONTAINER_RAID}/deps
     export PATH=${CONTAINER_RAID}/deps/bin:\$PATH
-    export PYTHONPATH=${CONTAINER_RAID}/deps/lib/python3.12/site-packages:${CONTAINER_RAID}/deps/lib/python3.11/site-packages:${CONTAINER_RAID}/recsys-examples/examples:\$PYTHONPATH
+    export PYTHONPATH='${DEPS_SITE_PATH}'
     bash ${CONTAINER_RAID}/_install_train_inner.sh
   " 2>&1 | tee "${LOG}"
 
 echo "==> Install log: ${LOG}"
 echo "==> If smoke printed INSTALL_OK, proceed to 04_preprocess.sh"
 echo "==> On fbgemm_gpu_hstu OOM/ninja failure: MAX_JOBS=2 ./scripts/03_install_train.sh"
+echo "==> Tip: existing fbgemm under deps/local/lib/.../dist-packages is now on PYTHONPATH;"
+echo "         re-run should pick it up without a full FBGEMM rebuild."
