@@ -130,5 +130,19 @@ Dataset path is set to `/raid/hstu/data` (container mount of the raid tree).
 
 - Install script skips Triton / FlexKV / NVE / AOTI (training-only).
 - First `03_install_train.sh` can take a long time (FBGEMM CUDA build).
+- `fbgemm_gpu_hstu` build defaults for this B200 kit:
+  - `MAX_JOBS=4` (use `2` if OOM)
+  - `HSTU_ARCH_LIST=10.0` (Blackwell only; skips Hopper sm90)
+  - `HSTU_DISABLE_FP8=TRUE` (MovieLens bf16 does not need e4m3 kernels)
+  ```bash
+  MAX_JOBS=2 ./scripts/03_install_train.sh
+  ```
+  Re-runs skip packages that already import cleanly. If `hstu` was half-installed, force rebuild:
+  ```bash
+  rm -rf /raid/hstu/deps/lib/python3.12/site-packages/hstu* \
+         /raid/hstu/deps/lib/python3.12/site-packages/fbgemm_gpu_hstu* \
+         /raid/hstu/recsys-examples/third_party/FBGEMM/fbgemm_gpu/experimental/hstu/build
+  MAX_JOBS=2 ./scripts/03_install_train.sh
+  ```
 - If nsys reports “No reports were generated”, confirm `TrainerArgs.profile=True` and that the container was started with `--privileged` (already set in 07–10).
 - `MASTER_PORT` defaults to `6000`; change if something else is bound.

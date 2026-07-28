@@ -31,9 +31,18 @@ export RECSYS_REF="${RECSYS_REF:-main}"
 export NSYS_BIN="${NSYS_BIN:-$(command -v nsys || true)}"
 export NCU_BIN="${NCU_BIN:-$(command -v ncu || true)}"
 
-# CUDA arch list for Blackwell B200 (sm_100) + forward-compat
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.5 8.0 8.6 9.0 10.0 12.0}"
-export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 9.0 10.0 12.0}"
+# CUDA archs for B200 (sm_100). HSTU defaults to 10.0 only so we skip Hopper
+# sm90 FP8 instantiations that commonly fail / bloat the build on this node.
+# Override e.g. HSTU_ARCH_LIST="8.0 9.0 10.0" if you need multi-arch kernels.
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-10.0}"
+export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-10.0}"
+# Cap nvcc parallelism — fbgemm_gpu_hstu OOMs with default ninja -j $(nproc)
+# (upstream Dockerfile historically used MAX_JOBS=2).
+export MAX_JOBS="${MAX_JOBS:-4}"
+export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
+# MovieLens bf16 training does not need FP8 kernels; disabling avoids the
+# sm90 e4m3 bwd instantiations that were failing in your log.
+export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
 
 # Gin configs shipped in this repo
 export RANKING_PROFILE_GIN="${RANKING_PROFILE_GIN:-${HSTU_OPT_ROOT}/configs/movielen_ranking_profile.gin}"
