@@ -169,9 +169,12 @@ fi
 echo "    torchrec -> $(py_show 'import torchrec; print(torchrec.__file__)')"
 
 echo "==> [4/6] fbgemm_gpu_hstu (import hstu) from recsys submodule"
-if py_ok "import hstu"; then
-  echo "    skip hstu (already importable): $(py_show 'import hstu; print(hstu.__file__)')"
+# Must NOT treat examples/hstu (on PYTHONPATH via .../examples) as the package.
+# Require the real attention API from fbgemm_gpu_hstu.
+if py_ok "from hstu import hstu_attn_varlen_func; import hstu; assert 'site-packages' in (hstu.__file__ or '') or 'dist-packages' in (hstu.__file__ or '')"; then
+  echo "    skip hstu (real package): $(py_show 'import hstu; print(hstu.__file__)')"
 else
+  echo "    building fbgemm_gpu_hstu (previous import was missing or was examples/hstu shadow)"
   if [[ ! -d "${RECSYS}/third_party/FBGEMM/fbgemm_gpu/experimental/hstu" ]]; then
     echo "ERROR: missing third_party/FBGEMM HSTU sources; re-run 02_clone_upstream.sh" >&2
     exit 1
@@ -253,7 +256,11 @@ import gin; print("gin ok")
 import megatron.core; print("megatron.core ok")
 import fbgemm_gpu; print("fbgemm_gpu", fbgemm_gpu.__file__)
 import torchrec; print("torchrec", torchrec.__file__)
-import hstu; print("hstu", hstu.__file__)
+from hstu import hstu_attn_varlen_func
+import hstu
+print("hstu", hstu.__file__)
+assert hstu_attn_varlen_func is not None
+assert "examples/hstu" not in (hstu.__file__ or ""), hstu.__file__
 import dynamicemb; print("dynamicemb", dynamicemb.__file__)
 import hstu_cuda_ops; print("hstu_cuda_ops", hstu_cuda_ops.__file__)
 import kk_cpu_ops; print("kk_cpu_ops", kk_cpu_ops.__file__)

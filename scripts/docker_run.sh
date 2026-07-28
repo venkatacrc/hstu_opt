@@ -87,9 +87,12 @@ DOCKER_ARGS=(
   -e MAX_JOBS="${MAX_JOBS:-4}"
   -e CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS:-4}}"
   -e PYTHONUSERBASE="${DEPS_IN_CTR}"
-  # examples/hstu first so `import configs` resolves to upstream RankingConfig,
-  # never a shadowed hstu_opt package directory.
-  -e PYTHONPATH="${CONTAINER_WORKDIR}:${CONTAINER_RAID}/recsys-examples/examples:${SITE_PATH}"
+  # Path order matters:
+  #  1) examples/hstu — upstream `configs`, `model`, `modules`, ...
+  #  2) SITE_PATH — installed `hstu` (fbgemm_gpu_hstu), dynamicemb, ...
+  #  3) examples/ — `commons` (must come AFTER site-packages: the
+  #     examples/hstu directory would otherwise shadow the `hstu` package)
+  -e PYTHONPATH="${CONTAINER_WORKDIR}:${SITE_PATH}:${CONTAINER_RAID}/recsys-examples/examples"
   -e PATH="${DEPS_IN_CTR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   -e FILL_DYNAMICEMB_TABLES="${FILL_DYNAMICEMB_TABLES:-1}"
   -v "${HSTU_RAID_ROOT}:${CONTAINER_RAID}"

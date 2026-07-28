@@ -47,11 +47,13 @@ run_torchrun() {
     docker_cmd+=("${extra_docker[@]}")
   fi
 
-  # Upstream imports `from configs import RankingConfig` relative to examples/hstu.
-  # torchrun puts the script dir (training/) on sys.path first, so we must put
-  # examples/hstu itself on PYTHONPATH (not only examples/). Keep deps sites too.
+  # Path order is critical:
+  #  1) examples/hstu — `configs`, `model`, `modules`, ...
+  #  2) deps site-packages — real `hstu` package (fbgemm_gpu_hstu)
+  #  3) examples/ — `commons` ONLY after site-packages, otherwise
+  #     examples/hstu shadows `import hstu` as a namespace package.
   local deps="${CONTAINER_RAID}/deps"
-  local py_path="${CONTAINER_WORKDIR}:${CONTAINER_RAID}/recsys-examples/examples:${deps}/lib/python3.12/site-packages:${deps}/local/lib/python3.12/dist-packages:${deps}/lib/python3.12/dist-packages"
+  local py_path="${CONTAINER_WORKDIR}:${deps}/lib/python3.12/site-packages:${deps}/local/lib/python3.12/dist-packages:${deps}/lib/python3.12/dist-packages:${deps}/local/lib/python3.12/site-packages:${CONTAINER_RAID}/recsys-examples/examples"
 
   "${docker_cmd[@]}" -- \
     bash -lc "

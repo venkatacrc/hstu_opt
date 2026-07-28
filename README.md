@@ -128,6 +128,8 @@ Dataset path is set to `/raid/hstu/data` (container mount of the raid tree).
 
 Gin files are under `gin/` on purpose: a top-level `configs/` directory would shadow upstream `examples/hstu/configs` (`RankingConfig`) when that path ends up on `PYTHONPATH`.
 
+`PYTHONPATH` must list **deps site-packages before `examples/`**. Otherwise `import hstu` resolves to the `examples/hstu` tree (namespace package) instead of the installed `fbgemm_gpu_hstu` attention library (`hstu_attn_varlen_func`).
+
 ## Notes
 
 - Install script skips Triton / FlexKV / NVE / AOTI (training-only).
