@@ -95,6 +95,7 @@ DOCKER_ARGS=(
   -e PYTHONPATH="${CONTAINER_WORKDIR}:${SITE_PATH}:${CONTAINER_RAID}/recsys-examples/examples"
   -e PATH="${DEPS_IN_CTR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   -e FILL_DYNAMICEMB_TABLES="${FILL_DYNAMICEMB_TABLES:-1}"
+  -e HSTU_FORCE_NATIVE="${HSTU_FORCE_NATIVE:-1}"
   -v "${HSTU_RAID_ROOT}:${CONTAINER_RAID}"
   -v "${HSTU_OPT_ROOT}:${CONTAINER_RAID}/hstu_opt:ro"
   -w "${CONTAINER_WORKDIR}"

@@ -55,6 +55,12 @@ run_torchrun() {
   local deps="${CONTAINER_RAID}/deps"
   local py_path="${CONTAINER_WORKDIR}:${deps}/lib/python3.12/site-packages:${deps}/local/lib/python3.12/dist-packages:${deps}/lib/python3.12/dist-packages:${deps}/local/lib/python3.12/site-packages:${CONTAINER_RAID}/recsys-examples/examples"
 
+  # Ensure B200 native-layer patch is applied (idempotent) for contextual datasets.
+  if [[ -f "${SCRIPT_DIR}/patch_b200_native_layer.py" && -f "${HSTU_EXAMPLE_ROOT}/training/trainer/utils.py" ]]; then
+    python3 "${SCRIPT_DIR}/patch_b200_native_layer.py" \
+      "${HSTU_EXAMPLE_ROOT}/training/trainer/utils.py" || true
+  fi
+
   "${docker_cmd[@]}" -- \
     bash -lc "
       set -euo pipefail
@@ -62,6 +68,8 @@ run_torchrun() {
       export PYTHONPATH='${py_path}'
       export CUDA_DEVICE_MAX_CONNECTIONS=${CUDA_DEVICE_MAX_CONNECTIONS}
       export FILL_DYNAMICEMB_TABLES=1
+      export HSTU_FORCE_NATIVE=${HSTU_FORCE_NATIVE:-1}
+      echo \"HSTU_FORCE_NATIVE=\${HSTU_FORCE_NATIVE} (1=NATIVE layer for MovieLens contextual tokens on B200)\"
       torchrun \
         --standalone \
         --nproc_per_node=${nproc} \

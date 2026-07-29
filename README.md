@@ -158,5 +158,10 @@ Gin files are under `gin/` on purpose: a top-level `configs/` directory would sh
   ```bash
   ./scripts/patch_hstu_ops_gpu.sh
   ```
+  If train fails with `Blackwell fused_hstu_op does not support contextual tokens`:
+  ```bash
+  ./scripts/patch_b200_native_layer.sh   # also auto-applied by 05–10 launchers
+  # HSTU_FORCE_NATIVE=1 is the default (NATIVE layer; MovieLens has contextual feats)
+  ```
 - If nsys reports “No reports were generated”, confirm `TrainerArgs.profile=True` and that the container was started with `--privileged` (already set in 07–10).
 - `MASTER_PORT` defaults to `6000`; change if something else is bound.

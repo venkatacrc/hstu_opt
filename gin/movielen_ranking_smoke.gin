@@ -1,4 +1,5 @@
 # MovieLens-20M ranking — smoke train (no profiler capture).
+# B200: fused HSTU rejects contextual tokens; train scripts set HSTU_FORCE_NATIVE=1.
 
 TrainerArgs.train_batch_size = 128
 TrainerArgs.eval_batch_size = 128

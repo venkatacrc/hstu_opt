@@ -45,6 +45,9 @@ export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 # Skip FP8 / Hopper-heavy paths; MovieLens bf16 does not need them.
 export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
 export HSTU_DISABLE_120="${HSTU_DISABLE_120:-TRUE}"
+# Blackwell fused_hstu_op rejects contextual tokens (MovieLens). Default to
+# NATIVE layer via patch_b200_native_layer.py. Set 0 only for non-contextual data.
+export HSTU_FORCE_NATIVE="${HSTU_FORCE_NATIVE:-1}"
 
 # Gin configs shipped in this repo
 # Gin files live under gin/ (not configs/) so we never shadow upstream

@@ -1,5 +1,5 @@
 # MovieLens-20M ranking — short run for nsys/ncu (cudaProfilerApi window).
-# Mounted into the container at /raid/hstu/hstu_opt/configs/...
+# B200: fused HSTU rejects contextual tokens; train scripts set HSTU_FORCE_NATIVE=1.
 
 TrainerArgs.train_batch_size = 128
 TrainerArgs.eval_batch_size = 128
