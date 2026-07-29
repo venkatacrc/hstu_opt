@@ -66,16 +66,17 @@ export PYTHONNOUSERSITE=0
 # Avoid NGC pip constraint files interfering with source builds
 unset PIP_CONSTRAINT || true
 
-# Must include 8.0 (or 9.0/12.0) so CUDAExtension/.so is built; 10.0 alone
-# only installs pure-Python hstu_blackwell and leaves no .so for library.py.
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0 10.0}"
-export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 10.0}"
+# Must include 8.0/9.0/12.0 so CUDAExtension/.so is built; 10.0 alone only
+# installs pure-Python hstu_blackwell. Prefer 8.0+9.0+10.0 so hstu_ops_gpu's
+# register_fake(fwd_80/fwd_90) both succeed (DISABLE_FP8 keeps Hopper lighter).
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0 9.0 10.0}"
+export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 9.0 10.0}"
 export HSTU_DISABLE_FP8="${HSTU_DISABLE_FP8:-TRUE}"
 export HSTU_DISABLE_120="${HSTU_DISABLE_120:-TRUE}"
 export MAX_JOBS="${MAX_JOBS:-4}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 if [[ "${HSTU_ARCH_LIST}" == "10.0" ]]; then
-  echo "ERROR: HSTU_ARCH_LIST=10.0 alone skips CUDAExtension; use '8.0 10.0'" >&2
+  echo "ERROR: HSTU_ARCH_LIST=10.0 alone skips CUDAExtension; use '8.0 9.0 10.0'" >&2
   exit 1
 fi
 
@@ -372,6 +373,13 @@ pkg = os.path.dirname(hstu.__file__)
 sos = glob.glob(os.path.join(pkg, "fbgemm_gpu_experimental_hstu*.so"))
 print("hstu sos", sos)
 assert sos, f"missing fbgemm_gpu_experimental_hstu*.so under {pkg}"
+# Soft-register fake ops so an 8.0-only .so does not crash on fwd_90
+import runpy, pathlib
+patch = pathlib.Path("/raid/hstu/hstu_opt/scripts/patch_hstu_ops_gpu.py")
+if patch.is_file():
+    runpy.run_path(str(patch), run_name="__main__")
+import hstu.hstu_ops_gpu  # noqa: F401
+print("hstu.hstu_ops_gpu ok")
 import dynamicemb; print("dynamicemb", dynamicemb.__file__)
 import hstu_cuda_ops; print("hstu_cuda_ops", hstu_cuda_ops.__file__)
 import kk_cpu_ops; print("kk_cpu_ops", kk_cpu_ops.__file__)

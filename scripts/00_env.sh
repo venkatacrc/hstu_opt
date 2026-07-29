@@ -32,12 +32,13 @@ export NSYS_BIN="${NSYS_BIN:-$(command -v nsys || true)}"
 export NCU_BIN="${NCU_BIN:-$(command -v ncu || true)}"
 
 # B200 runtime uses pure-Python/Triton sm100 kernels (hstu.hstu_blackwell) when
-# 10.0 is in HSTU_ARCH_LIST. BUT setup.py only compiles fbgemm_gpu_experimental_hstu.so
+# 10.0 is in HSTU_ARCH_LIST. setup.py only compiles fbgemm_gpu_experimental_hstu.so
 # when 8.0 / 9.0 / 12.0 is present — and library.py always load_library()'s that .so.
-# So we need BOTH: 8.0 (Ampere CUDA ext, lighter than Hopper) + 10.0 (Blackwell path).
+# hstu_ops_gpu.py also register_fake()'s BOTH fwd_80 and fwd_90, so the .so must
+# include Hopper (9.0) ops too (or use scripts/patch_hstu_ops_gpu.sh).
 # Do NOT use HSTU_ARCH_LIST=10.0 alone or you get a package with no .so.
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0 10.0}"
-export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 10.0}"
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.0 9.0 10.0}"
+export HSTU_ARCH_LIST="${HSTU_ARCH_LIST:-8.0 9.0 10.0}"
 # Cap nvcc parallelism — fbgemm_gpu_hstu OOMs with default ninja -j $(nproc).
 export MAX_JOBS="${MAX_JOBS:-4}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"

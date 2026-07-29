@@ -136,8 +136,8 @@ Gin files are under `gin/` on purpose: a top-level `configs/` directory would sh
 - First `03_install_train.sh` can take a long time (FBGEMM CUDA build).
 - `fbgemm_gpu_hstu` build defaults for this B200 kit:
   - `MAX_JOBS=4` (use `2` if OOM)
-  - `HSTU_ARCH_LIST="8.0 10.0"` — **must not be `10.0` alone**. sm100 is pure Python (`hstu_blackwell`); the CUDA `.so` is only built for 8.0/9.0/12.0, and `library.py` always loads that `.so`.
-  - `HSTU_DISABLE_FP8=TRUE` (MovieLens bf16 does not need e4m3 kernels)
+  - `HSTU_ARCH_LIST="8.0 9.0 10.0"` — **must not be `10.0` alone**. sm100 is pure Python (`hstu_blackwell`); the CUDA `.so` is built for 8.0/9.0/12.0. `hstu_ops_gpu` registers fake ops for both `fwd_80` and `fwd_90`, so include `9.0` (or run `./scripts/patch_hstu_ops_gpu.sh`).
+  - `HSTU_DISABLE_FP8=TRUE` (keeps Hopper compile tractable for bf16)
   ```bash
   MAX_JOBS=2 ./scripts/03_install_train.sh
   ```
@@ -153,6 +153,10 @@ Gin files are under `gin/` on purpose: a top-level `configs/` directory would sh
   ./scripts/fixup_hstu_so.sh
   # If that says no .so at all, force a full CUDA rebuild:
   FORCE_REBUILD=1 MAX_JOBS=2 ./scripts/fixup_hstu_so.sh
+  ```
+  If import fails with `operator fbgemm::hstu_varlen_fwd_90 does not exist`:
+  ```bash
+  ./scripts/patch_hstu_ops_gpu.sh
   ```
 - If nsys reports “No reports were generated”, confirm `TrainerArgs.profile=True` and that the container was started with `--privileged` (already set in 07–10).
 - `MASTER_PORT` defaults to `6000`; change if something else is bound.
